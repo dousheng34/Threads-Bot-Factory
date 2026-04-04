@@ -100,7 +100,7 @@ def settings_kb():
 async def cmd_start(message: Message):
       if not is_admin(message.from_user.id):
                 return
-            await message.answer(
+    await message.answer(
                       "<b>Threads Bot Factory</b>\n\nWelcome! Select a section:",
                       reply_markup=main_menu_kb()
             )
