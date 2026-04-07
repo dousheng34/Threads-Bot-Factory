@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+:root {
+  --bg-primary: #030712;
+  --bg-secondary: #0f172a;
+  --bg-card: rgba(15, 23, 42, 0.6);
+  --bg-card-hover: rgba(30, 41, 59, 0.8);
+  --border-color: rgba(51, 65, 85, 0.5);
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --accent: #0095f6;
+  --accent-hover: #0077cc;
+  --gradient-threads: linear-gradient(135deg, #405de6, #5851db, #833ab4, #c13584, #e1306c, #fd1d1d);
+  --gradient-success: linear-gradient(135deg, #10b981, #34d399);
+  --gradient-warning: linear-gradient(135deg, #f59e0b, #fbbf24);
+  --gradient-danger: linear-gradient(135deg, #ef4444, #f87171);
+  --gradient-purple: linear-gradient(135deg, #8b5cf6, #a78bfa);
+  --glass-bg: rgba(15, 23, 42, 0.5);
+  --glass-border: rgba(148, 163, 184, 0.1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg-primary); color: var(--text-primary); overflow-x: hidden; min-height: 100vh; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.3); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.5); }
+
+@layer components {
+  .glass-card { @apply relative overflow-hidden rounded-2xl border; background: var(--glass-bg); border-color: var(--glass-border); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+  .glass-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.2), transparent); }
+  .glass-card:hover { border-color: rgba(148, 163, 184, 0.2); }
+  .glass-input { @apply w-full px-4 py-3 rounded-xl border text-sm transition-all duration-200 outline-none; background: rgba(15, 23, 42, 0.8); border-color: var(--glass-border); color: var(--text-primary); }
+  .glass-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0, 149, 246, 0.15); }
+  .glass-input::placeholder { color: var(--text-secondary); }
+  .btn-primary { @apply px-5 py-2.5 rounded-xl font-medium text-sm text-white transition-all duration-200; background: var(--gradient-threads); box-shadow: 0 4px 15px rgba(131, 58, 180, 0.3); }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(131, 58, 180, 0.4); }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-secondary { @apply px-5 py-2.5 rounded-xl font-medium text-sm transition-all duration-200 border; background: rgba(15, 23, 42, 0.5); border-color: var(--glass-border); color: var(--text-primary); }
+  .btn-secondary:hover { background: rgba(30, 41, 59, 0.8); border-color: rgba(148, 163, 184, 0.3); }
+  .btn-danger { @apply px-5 py-2.5 rounded-xl font-medium text-sm text-white transition-all duration-200; background: var(--gradient-danger); box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3); }
+  .btn-success { @apply px-5 py-2.5 rounded-xl font-medium text-sm text-white transition-all duration-200; background: var(--gradient-success); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3); }
+  .stat-card { @apply glass-card p-5 transition-all duration-300; }
+  .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3); }
+  .status-badge { @apply px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1; }
+  .status-active { @apply status-badge; background: rgba(16, 185, 129, 0.15); color: #34d399; }
+  .status-warming { @apply status-badge; background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+  .status-banned { @apply status-badge; background: rgba(239, 68, 68, 0.15); color: #f87171; }
+  .status-limited { @apply status-badge; background: rgba(139, 92, 246, 0.15); color: #a78bfa; }
+  .status-inactive { @apply status-badge; background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
+  .nav-item { @apply flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer; color: var(--text-secondary); }
+  .nav-item:hover { background: rgba(30, 41, 59, 0.5); color: var(--text-primary); }
+  .nav-item.active { background: rgba(0, 149, 246, 0.1); color: var(--accent); border: 1px solid rgba(0, 149, 246, 0.2); }
+  .table-row { @apply border-b transition-all duration-150; border-color: var(--glass-border); }
+  .table-row:hover { background: rgba(30, 41, 59, 0.3); }
+  .progress-bar { @apply h-2 rounded-full overflow-hidden; background: rgba(30, 41, 59, 0.8); }
+  .progress-bar-fill { @apply h-full rounded-full transition-all duration-500; background: var(--gradient-threads); }
+  .modal-overlay { @apply fixed inset-0 z-50 flex items-center justify-center p-4; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); }
+  .modal-content { @apply glass-card p-6 w-full max-w-lg; max-height: 90vh; overflow-y: auto; }
+  .pulse-dot { @apply w-2 h-2 rounded-full; animation: pulse 2s infinite; }
+  .threads-gradient-text { background: var(--gradient-threads); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+}
+
+.bg-orb { position: fixed; border-radius: 50%; filter: blur(100px); opacity: 0.15; pointer-events: none; z-index: 0; }
+.bg-orb-1 { width: 600px; height: 600px; background: #833ab4; top: -200px; right: -200px; animation: float 8s ease-in-out infinite; }
+.bg-orb-2 { width: 400px; height: 400px; background: #0095f6; bottom: -100px; left: -100px; animation: float 10s ease-in-out infinite reverse; }
+.bg-orb-3 { width: 300px; height: 300px; background: #e1306c; top: 50%; left: 50%; animation: float 12s ease-in-out infinite; }
+
+@keyframes float { 0%, 100% { transform: translateY(0px) rotate(0deg); } 33% { transform: translateY(-20px) rotate(5deg); } 66% { transform: translateY(10px) rotate(-3deg); } }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+.mini-chart { display: flex; align-items: flex-end; gap: 2px; height: 40px; }
+.mini-chart-bar { width: 4px; border-radius: 2px; background: var(--gradient-threads); transition: height 0.3s ease; min-height: 4px; }
+.skeleton { background: linear-gradient(90deg, rgba(30, 41, 59, 0.5) 25%, rgba(51, 65, 85, 0.5) 50%, rgba(30, 41, 59, 0.5) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 8px; }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
