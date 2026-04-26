@@ -1,14 +1,41 @@
 """
 Threads Bot Factory — Database Module
-SQLite database for storing accounts, proxies, templates, scheduled posts
+SQLite database for storing accounts, proxies, templates, scheduled posts.
+
+DB path priority:
+  1. $DB_PATH env var  (set in Koyeb to /app/data/bot_factory.db so it lives on the volume)
+  2. ./bot_factory.db  (local fallback)
+
+On startup we auto-migrate an old DB file located next to database.py into
+$DB_PATH if the new path is empty — so existing data is preserved when you
+first attach a persistent volume.
 """
 
 import aiosqlite
 import json
 import os
+import shutil
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot_factory.db")
+_DEFAULT_LOCAL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot_factory.db")
+DB_PATH = os.environ.get("DB_PATH") or _DEFAULT_LOCAL
+
+# Ensure parent directory exists (e.g. /app/data on Koyeb volume)
+os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)) or ".", exist_ok=True)
+
+# Auto-migrate legacy DB (next to code) into the persistent volume on first run.
+if (
+    DB_PATH != _DEFAULT_LOCAL
+    and os.path.exists(_DEFAULT_LOCAL)
+    and not os.path.exists(DB_PATH)
+):
+    try:
+        shutil.copy2(_DEFAULT_LOCAL, DB_PATH)
+        print(f"[db] migrated legacy DB → {DB_PATH}")
+    except Exception as e:
+        print(f"[db] legacy migration failed: {e}")
+
+print(f"[db] using {DB_PATH}")
 
 
 async def init_db():
@@ -303,27 +330,22 @@ async def log_post(account_id: int, content: str, status: str, thread_id: str = 
 
 async def get_post_stats() -> dict:
     async with aiosqlite.connect(DB_PATH) as db:
-        # Total posts
         cursor = await db.execute("SELECT COUNT(*) FROM post_log")
         total = (await cursor.fetchone())[0]
 
-        # Success
         cursor = await db.execute("SELECT COUNT(*) FROM post_log WHERE status = 'success'")
         success = (await cursor.fetchone())[0]
 
-        # Today
         today = datetime.now().strftime("%Y-%m-%d")
         cursor = await db.execute("SELECT COUNT(*) FROM post_log WHERE created_at LIKE ?", (f"{today}%",))
         today_count = (await cursor.fetchone())[0]
 
-        # Accounts
         cursor = await db.execute("SELECT COUNT(*) FROM accounts")
         accounts = (await cursor.fetchone())[0]
 
         cursor = await db.execute("SELECT COUNT(*) FROM accounts WHERE status = 'active'")
         active = (await cursor.fetchone())[0]
 
-        # Proxies
         cursor = await db.execute("SELECT COUNT(*) FROM proxies WHERE status = 'active'")
         active_proxies = (await cursor.fetchone())[0]
 
