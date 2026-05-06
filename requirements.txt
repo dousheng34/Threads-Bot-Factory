@@ -1,4 +1,42 @@
-aiogram>=3.13.0
-aiohttp>=3.11.0
-aiosqlite>=0.20.0
-apscheduler>=3.10.4
+# Threads Bot Factory — Dependencies
+# Install: pip install -r requirements.txt
+
+# Web Framework
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+jinja2==3.1.4
+python-multipart==0.0.9
+
+# Database
+sqlalchemy==2.0.30
+aiosqlite==0.20.0
+alembic==1.13.1
+
+# HTTP & Async
+httpx==0.27.0
+aiohttp==3.9.5
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+itsdangerous==2.2.0
+
+# Scheduler
+apscheduler==3.10.4
+
+# AI (OpenAI compatible)
+openai==1.30.0
+
+# Threads / Instagram
+instagrapi==2.0.0
+
+# Telegram Bot
+aiogram==3.7.0
+
+# Environment
+python-dotenv==1.0.1
+
+# Utils
+pydantic==2.7.1
+pydantic-settings==2.3.0
+loguru==0.7.2
