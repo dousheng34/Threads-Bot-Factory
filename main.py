@@ -19,9 +19,10 @@ async def run_webapp():
     port = int(os.getenv("PORT", "8000"))
     if port != 8000:
         port = 8000
-    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
+    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="info")
     server = uvicorn.Server(config)
     await server.serve()
+
 
 
 async def run_nextjs():
