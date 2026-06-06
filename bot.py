@@ -27,7 +27,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()]
 WEBAPP_URL = os.getenv("WEBAPP_URL", "http://localhost:8000")
 
-bot = Bot(token=BOT_TOKEN)
+bot = Bot(token=BOT_TOKEN) if BOT_TOKEN else None
 dp = Dispatcher(storage=MemoryStorage())
 
 
