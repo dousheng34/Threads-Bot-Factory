@@ -31,6 +31,13 @@ bot = Bot(token=BOT_TOKEN) if BOT_TOKEN else None
 dp = Dispatcher(storage=MemoryStorage())
 
 
+@dp.startup()
+async def on_startup(bot: Bot):
+    await db.init_db()
+    logger.info("Database initialized on bot startup")
+
+
+
 class AddAccount(StatesGroup):
     username = State()
     password = State()

@@ -22,6 +22,12 @@ app = FastAPI(title="Threads Bot Factory", version="2.0")
 app.include_router(oauth_router)
 
 
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
+
+
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 ADMIN_TG_ID = int(os.getenv("ADMIN_TELEGRAM_ID", "0"))
 SESSION_DAYS = int(os.getenv("SESSION_DAYS", "30"))

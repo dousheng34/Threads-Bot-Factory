@@ -25,4 +25,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD curl -fsS http://localhost:${PORT}/health || exit 1
 
-CMD ["python", "-u", "bot.py"]
+CMD ["python", "-u", "main.py"]
