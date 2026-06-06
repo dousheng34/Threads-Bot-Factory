@@ -2,17 +2,28 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# System deps for SSL/healthcheck
+# System deps and Node.js installation (Node 20)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates \
+    curl ca-certificates gnupg \
+  && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+  && apt-get install -y --no-install-recommends nodejs \
   && rm -rf /var/lib/apt/lists/*
+
+# Install Node dependencies
+COPY package*.json ./
+RUN npm ci
 
 # Install Python deps first (better layer caching)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy ALL project files (including new ai_*.py modules)
+# Copy ALL project files
 COPY . .
+
+# Build Next.js app (limit memory to prevent out-of-memory errors on free hosting)
+ENV NODE_OPTIONS="--max-old-space-size=450"
+RUN npm run build
+
 
 # Persist SQLite DB across deploys (Koyeb volume mount target)
 VOLUME ["/app/data"]

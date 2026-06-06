@@ -6,6 +6,10 @@ const nextConfig = {
   async rewrites() {
     return [
       {
+        source: '/health',
+        destination: 'http://localhost:8000/health',
+      },
+      {
         source: '/api/:path*',
         destination: 'http://localhost:8000/api/:path*',
       },
@@ -15,6 +19,7 @@ const nextConfig = {
       },
     ];
   },
+
 };
 
 module.exports = nextConfig;
