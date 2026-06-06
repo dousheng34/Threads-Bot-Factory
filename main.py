@@ -28,6 +28,10 @@ async def run_bot():
 
 
 async def main():
+    import database as db
+    await db.init_db()
+    logger.info("Database initialized")
+    
     start_scheduler()
     logger.info("Scheduler started")
 
