@@ -157,3 +157,52 @@ async def analyze_sentiment(text: str) -> str:
     )
     r = (await chat(p)).lower().strip().split()[0:1]
     return r[0] if r else "neutral"
+
+
+ADAPT_SYSTEM = (
+    "You are an AI Content Transformer. Your job is to take a single input social media post "
+    "and adapt it into three specific platform-optimized variants, returned strictly in JSON format.\n"
+    "Output must be a valid JSON object matching this schema exactly:\n"
+    "{\n"
+    "  \"threads\": [\"string (part 1 of thread)\", \"string (part 2 of thread)\", ...],\n"
+    "  \"instagram\": {\n"
+    "    \"caption\": \"string (short engaging caption)\",\n"
+    "    \"hashtags\": [\"#tag1\", \"#tag2\", ...]\n"
+    "  },\n"
+    "  \"whatsapp\": {\n"
+    "    \"text\": \"string (structured channel post text)\",\n"
+    "    \"cta\": \"string (clear call to action)\"\n"
+    "  }\n"
+    "}\n"
+    "Rules:\n"
+    "- Threads: Slice the text into a clean chain (thread) of 2-4 interconnected messages. Part 1 must be a strong hook.\n"
+    "- Instagram: A brief hook-based text. Add appropriate hashtags separately in the hashtags list.\n"
+    "- WhatsApp: A structured, easy-to-read text with markdown highlights (bold, lists) and a compelling Call-To-Action (CTA) at the end.\n"
+    "- Maintain the original language of the input post.\n"
+    "- Do not include any markdown styling like ```json or similar in your response. Output raw JSON only."
+)
+
+async def adapt_content(original_text: str) -> dict:
+    """Adapts a single post into Threads threads, Instagram caption, and WhatsApp structured message."""
+    prompt = f"Original post content:\n{original_text}\n\nAdapt it for Threads, Instagram, and WhatsApp."
+    response = await chat(prompt, ADAPT_SYSTEM)
+    response = response.strip()
+    # Remove markdown code fence if present
+    if response.startswith("```"):
+        lines = response.split("\n")
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines[-1].startswith("```"):
+            lines = lines[:-1]
+        response = "\n".join(lines).strip()
+    try:
+        return json.loads(response)
+    except Exception as e:
+        log.error("Failed to parse JSON response from AI Content Transformer: %s. Raw response: %s", e, response)
+        # Fallback dictionary
+        return {
+            "threads": [original_text],
+            "instagram": {"caption": original_text[:200], "hashtags": ["#marketing", "#smm"]},
+            "whatsapp": {"text": original_text, "cta": "Узнать больше!"}
+        }
+

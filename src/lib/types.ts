@@ -4,6 +4,7 @@
 
 export interface ThreadsAccount {
   id: string;
+  platform: 'threads' | 'instagram' | 'whatsapp';
   username: string;
   threadsUserId: string;
   accessToken: string;
@@ -122,4 +123,4 @@ export interface ChartPoint {
   engagement: number;
 }
 
-export type TabType = 'dashboard' | 'accounts' | 'posting' | 'automation' | 'proxies' | 'templates' | 'settings' | 'ai-video';
+export type TabType = 'dashboard' | 'accounts' | 'posting' | 'automation' | 'proxies' | 'templates' | 'settings' | 'ai-video' | 'leadgen' | 'analytics';

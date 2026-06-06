@@ -1,107 +1,157 @@
-"""
-OAuth Module — Авторизация аккаунтов Threads через OAuth
-Callback обрабатывается через единый веб-сервер в bot.py
-"""
+from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi.responses import RedirectResponse, HTMLResponse
+import httpx
 import os
-import aiohttp
-from aiohttp import web
-from threads_api import get_long_lived_token
+import urllib.parse
+from loguru import logger
 import database as db
 
-THREADS_APP_ID = os.getenv("THREADS_APP_ID", "4354181008180845")
-THREADS_APP_SECRET = os.getenv("THREADS_APP_SECRET", "d1fa8ed851c44a6befd21ff050202c9f")
-# На Pella: установи REDIRECT_URI = https://<твой-домен.pella.app>/callback
-REDIRECT_URI = os.getenv("REDIRECT_URI", "http://209.126.86.32:8080/callback")
-SCOPES = "threads_basic,threads_content_publish,threads_manage_replies,threads_manage_insights"
+router = APIRouter(prefix="/auth", tags=["auth"])
 
-# Хранилище pending авторизаций {state: telegram_user_id}
-pending_auth = {}
+META_CLIENT_ID = os.getenv("META_CLIENT_ID", "")
+META_CLIENT_SECRET = os.getenv("META_CLIENT_SECRET", "")
+META_REDIRECT_URI = os.getenv("META_REDIRECT_URI", "")
 
+@router.get("/meta")
+async def meta_login(platform: str = "threads"):
+    """Redirect user to Meta Graph API OAuth login page"""
+    if not META_CLIENT_ID:
+        raise HTTPException(400, "META_CLIENT_ID environment variable not set")
+    
+    # Configure scopes depending on platform
+    if platform == "threads":
+        scopes = "threads_basic,threads_content_publish"
+        auth_url = (
+            "https://threads.net/oauth/authorize"
+            f"?client_id={META_CLIENT_ID}"
+            f"&redirect_uri={urllib.parse.quote(META_REDIRECT_URI)}"
+            f"&scope={scopes}"
+            "&response_type=code"
+            "&state=threads"
+        )
+    else:
+        scopes = "instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement"
+        auth_url = (
+            "https://www.facebook.com/v20.0/dialog/oauth"
+            f"?client_id={META_CLIENT_ID}"
+            f"&redirect_uri={urllib.parse.quote(META_REDIRECT_URI)}"
+            f"&scope={scopes}"
+            "&response_type=code"
+            "&state=instagram"
+        )
+        
+    return RedirectResponse(auth_url)
 
-def get_auth_url(state: str) -> str:
-    """Генерация URL для авторизации Threads"""
-    return (
-        f"https://threads.net/oauth/authorize"
-        f"?client_id={THREADS_APP_ID}"
-        f"&redirect_uri={REDIRECT_URI}"
-        f"&scope={SCOPES}"
-        f"&response_type=code"
-        f"&state={state}"
-    )
-
-
-async def handle_callback(request):
-    """Обработка OAuth callback от Threads"""
-    code = request.query.get("code")
-    state = request.query.get("state")
-    error = request.query.get("error")
-
+@router.get("/callback")
+async def meta_callback(request: Request, code: str = None, error: str = None, state: str = "threads"):
+    """Handle Meta OAuth authorization code callback"""
     if error:
-        return web.Response(text=f"❌ Ошибка: {error}", content_type="text/html")
-
-    if not code or not state:
-        return web.Response(text="❌ Нет кода или state", content_type="text/html")
-
-    telegram_user_id = pending_auth.pop(state, None)
-    if not telegram_user_id:
-        return web.Response(text="❌ Неизвестный state", content_type="text/html")
-
+        logger.error(f"[oauth] Meta OAuth error callback: {error}")
+        return HTMLResponse(content=f"<h3>Ошибка авторизации: {error}</h3>", status_code=400)
+    if not code:
+        raise HTTPException(400, "Authorization code is required")
+        
+    # Exchange code for token
+    from webapp import get_current_user
+    user = await get_current_user(request)
+    if not user:
+        return HTMLResponse(content="<h3>Ошибка: Вы должны быть авторизованы в боте</h3>", status_code=401)
+        
     try:
-        # Обмен кода на short-lived token
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                "https://graph.threads.net/oauth/access_token",
-                data={
-                    "client_id": THREADS_APP_ID,
-                    "client_secret": THREADS_APP_SECRET,
+        async with httpx.AsyncClient() as client:
+            if state == "threads":
+                url = "https://graph.threads.net/oauth/access_token"
+                payload = {
+                    "client_id": META_CLIENT_ID,
+                    "client_secret": META_CLIENT_SECRET,
                     "grant_type": "authorization_code",
-                    "redirect_uri": REDIRECT_URI,
-                    "code": code,
+                    "redirect_uri": META_REDIRECT_URI,
+                    "code": code
                 }
-            ) as resp:
-                data = await resp.json()
-
-        if "error" in data:
-            return web.Response(
-                text=f"❌ Ошибка: {data['error'].get('message', str(data))}",
-                content_type="text/html"
-            )
-
-        short_token = data["access_token"]
-        user_id = str(data["user_id"])
-
-        # Получаем long-lived token (60 дней)
-        long_data = await get_long_lived_token(short_token, THREADS_APP_SECRET)
-        long_token = long_data.get("access_token", short_token)
-
-        # Получаем username
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"https://graph.threads.net/v1.0/{user_id}",
-                params={"fields": "id,username", "access_token": long_token}
-            ) as resp:
-                profile = await resp.json()
-
-        username = profile.get("username", f"user_{user_id}")
-
-        # Сохраняем в БД
-        acc_id = await db.add_account(username, long_token, user_id)
-
-        return web.Response(
-            text=f"""
+                r = await client.post(url, data=payload)
+                r.raise_for_status()
+                data = r.json()
+                access_token = data.get("access_token")
+                threads_user_id = data.get("user_id")
+                
+                # Fetch profile info
+                profile_url = "https://graph.threads.net/me"
+                params = {
+                    "fields": "id,username,threads_profile_picture_url",
+                    "access_token": access_token
+                }
+                r_prof = await client.get(profile_url, params=params)
+                r_prof.raise_for_status()
+                profile = r_prof.json()
+                username = profile.get("username", f"threads_{threads_user_id}")
+                
+                await db.add_social_account(
+                    user_id=user["id"],
+                    platform="threads",
+                    platform_user_id=str(threads_user_id),
+                    username=username,
+                    access_token=access_token,
+                    token_expires_at=None,
+                    settings="{}"
+                )
+            else:
+                url = "https://graph.facebook.com/v20.0/oauth/access_token"
+                params = {
+                    "client_id": META_CLIENT_ID,
+                    "client_secret": META_CLIENT_SECRET,
+                    "redirect_uri": META_REDIRECT_URI,
+                    "code": code
+                }
+                r = await client.get(url, params=params)
+                r.raise_for_status()
+                data = r.json()
+                access_token = data.get("access_token")
+                
+                # Get Instagram Business Accounts connected to Pages
+                pages_url = "https://graph.facebook.com/v20.0/me/accounts"
+                r_pages = await client.get(pages_url, params={"access_token": access_token})
+                r_pages.raise_for_status()
+                pages = r_pages.json().get("data", [])
+                
+                added_accounts = []
+                for page in pages:
+                    page_id = page.get("id")
+                    page_token = page.get("access_token")
+                    
+                    ig_url = f"https://graph.facebook.com/v20.0/{page_id}"
+                    r_ig = await client.get(ig_url, params={"fields": "instagram_business_account{id,username,profile_picture_url}", "access_token": page_token})
+                    r_ig.raise_for_status()
+                    ig_data = r_ig.json().get("instagram_business_account")
+                    if ig_data:
+                        ig_id = ig_data.get("id")
+                        ig_username = ig_data.get("username")
+                        
+                        await db.add_social_account(
+                            user_id=user["id"],
+                            platform="instagram",
+                            platform_user_id=str(ig_id),
+                            username=ig_username,
+                            access_token=page_token,
+                            settings="{}"
+                        )
+                        added_accounts.append(ig_username)
+                        
+                if not added_accounts:
+                    return HTMLResponse(content="<h3>Авторизация прошла успешно, но не найдено привязанных Instagram Business аккаунтов. Убедитесь, что ваш Instagram аккаунт привязан к Facebook Page.</h3>")
+                    
+        return HTMLResponse(content="""
             <html>
-            <body style="font-family:Arial;text-align:center;padding:50px;background:#1a1a2e;color:white">
-            <h1>✅ Аккаунт подключён!</h1>
-            <p>👤 @{username}</p>
-            <p>🆔 ID: {acc_id}</p>
-            <p>Вернитесь в Telegram бот.</p>
-            </body></html>
-            """,
-            content_type="text/html"
-        )
-
+            <head>
+                <script>
+                    alert("✅ Аккаунт успешно добавлен!");
+                    window.location.href = "/dashboard";
+                </script>
+            </head>
+            <body>
+                <h3>Перенаправление...</h3>
+            </body>
+            </html>
+        """)
     except Exception as e:
-        return web.Response(
-            text=f"❌ Ошибка: {str(e)}",
-            content_type="text/html"
-        )
+        logger.error(f"[oauth] Exchange failed: {e}")
+        return HTMLResponse(content=f"<h3>Ошибка авторизации: {str(e)}</h3>", status_code=500)

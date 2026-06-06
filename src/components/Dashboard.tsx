@@ -6,13 +6,13 @@ import { TrendingUp, Users, Send, Activity, CheckCircle2, ArrowUpRight, ArrowDow
 export default function Dashboard() {
   const { accounts, automationTasks, scheduledPosts, proxies, getAnalytics } = useStore();
   const analytics = getAnalytics();
-  const stats = [
-    { label: 'Total Accounts', value: analytics.totalAccounts, change: '+2 this week', changeType: 'up' as const, icon: <Users size={20} />, gradient: 'var(--gradient-threads)' },
-    { label: 'Active', value: analytics.activeAccounts, change: Math.round((analytics.activeAccounts / analytics.totalAccounts) * 100) + '%', changeType: 'up' as const, icon: <CheckCircle2 size={20} />, gradient: 'var(--gradient-success)' },
-    { label: 'Posts Today', value: analytics.postsToday, change: '+12/hour', changeType: 'up' as const, icon: <Send size={20} />, gradient: 'var(--gradient-purple)' },
-    { label: 'Followers', value: analytics.totalFollowers.toLocaleString(), change: '+' + analytics.followersGained.toLocaleString(), changeType: 'up' as const, icon: <TrendingUp size={20} />, gradient: 'linear-gradient(135deg, #0095f6, #00d4ff)' },
-    { label: 'Active Proxies', value: analytics.activeProxies, change: 'of ' + proxies.length, changeType: 'neutral' as const, icon: <Shield size={20} />, gradient: 'var(--gradient-warning)' },
-    { label: 'Running Tasks', value: analytics.runningTasks, change: 'Active', changeType: 'up' as const, icon: <Bot size={20} />, gradient: 'var(--gradient-success)' },
+  const stats: { label: string; value: string | number; change: string; changeType: 'up' | 'down' | 'neutral'; icon: React.JSX.Element; gradient: string }[] = [
+    { label: 'Total Accounts', value: analytics.totalAccounts, change: '+2 this week', changeType: 'up', icon: <Users size={20} />, gradient: 'var(--gradient-threads)' },
+    { label: 'Active', value: analytics.activeAccounts, change: Math.round((analytics.activeAccounts / (analytics.totalAccounts || 1)) * 100) + '%', changeType: 'up', icon: <CheckCircle2 size={20} />, gradient: 'var(--gradient-success)' },
+    { label: 'Posts Today', value: analytics.postsToday, change: '+12/hour', changeType: 'up', icon: <Send size={20} />, gradient: 'var(--gradient-purple)' },
+    { label: 'Followers', value: analytics.totalFollowers.toLocaleString(), change: '+' + analytics.followersGained.toLocaleString(), changeType: 'up', icon: <TrendingUp size={20} />, gradient: 'linear-gradient(135deg, #0095f6, #00d4ff)' },
+    { label: 'Active Proxies', value: analytics.activeProxies, change: 'of ' + proxies.length, changeType: 'neutral', icon: <Shield size={20} />, gradient: 'var(--gradient-warning)' },
+    { label: 'Running Tasks', value: analytics.runningTasks, change: 'Active', changeType: 'up', icon: <Bot size={20} />, gradient: 'var(--gradient-success)' },
   ];
   const recentActivity = [
     { account: 'tech_insider_bot', text: 'Post about AI published', time: '2m ago', status: 'success' },

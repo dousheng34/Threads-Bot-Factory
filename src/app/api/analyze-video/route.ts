@@ -4,7 +4,7 @@ export const maxDuration = 60;
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
-async function callGemini(apiKey, parts) {
+async function callGemini(apiKey: string, parts: any[]) {
     const res = await fetch(GEMINI_URL + '?key=' + apiKey, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -20,7 +20,7 @@ async function callGemini(apiKey, parts) {
     return text.trim();
 }
 
-function parseJSON(raw) {
+function parseJSON(raw: string) {
     const cleaned = raw.replace(/^\`\`\`(?:json)?\n?/i, '').replace(/\n?\`\`\`$/i, '').trim();
     try { return JSON.parse(cleaned); } catch {
           const m = cleaned.match(/{[\s\S]*}/);
@@ -29,7 +29,7 @@ function parseJSON(raw) {
     }
 }
 
-export async function POST(req) {
+export async function POST(req: Request) {
     try {
           const apiKey = process.env.GEMINI_API_KEY;
           if (!apiKey) return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
@@ -65,10 +65,10 @@ export async function POST(req) {
 
       let rawText = '';
 
-      if (videoFile) {
-              const bytes = await videoFile.arrayBuffer();
+      if (videoFile && typeof videoFile !== 'string') {
+              const bytes = await (videoFile as File).arrayBuffer();
               const b64 = Buffer.from(bytes).toString('base64');
-              rawText = await callGemini(apiKey, [{ text: prompt }, { inlineData: { mimeType: videoFile.type || 'video/mp4', data: b64 } }]);
+              rawText = await callGemini(apiKey, [{ text: prompt }, { inlineData: { mimeType: (videoFile as File).type || 'video/mp4', data: b64 } }]);
       } else if (videoUrl) {
               let fetched = false;
               try {
@@ -88,7 +88,16 @@ export async function POST(req) {
       if (!rawText) return NextResponse.json({ error: 'Analysis failed' }, { status: 422 });
 
       const parsed = parseJSON(rawText);
-          return NextResponse.json({
-                  description: String(parsed.description || '').trim(),
-                  threadPost: String(parsed.threadPost || '').trim(),
-                  hashtags: Array.isArray(parsed.hashtags) ? p
+      return NextResponse.json({
+          description: String(parsed.description || '').trim(),
+          threadPost: String(parsed.threadPost || '').trim(),
+          hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags.map(String) : [],
+          contentType: String(parsed.contentType || '').trim(),
+          mood: String(parsed.mood || '').trim(),
+          suggestedTime: String(parsed.suggestedTime || '').trim(),
+          engagementScore: Number(parsed.engagementScore || 0)
+      });
+  } catch (error: any) {
+      return NextResponse.json({ error: error.message || 'Server error' }, { status: 500 });
+  }
+}

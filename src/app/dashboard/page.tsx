@@ -11,6 +11,8 @@ import ProxyManager from '@/components/ProxyManager';
 import Templates from '@/components/Templates';
 import SettingsPanel from '@/components/SettingsPanel';
 import VideoAnalyzer from '@/components/VideoAnalyzer';
+import LeadGenSettings from '@/components/LeadGenSettings';
+import AnalyticsDashboard from '@/components/AnalyticsDashboard';
 
 export default function DashboardPage() {
   const { activeTab } = useStore();
@@ -20,6 +22,8 @@ export default function DashboardPage() {
       case 'accounts':   return <AccountManager />;
       case 'posting':    return <PostScheduler />;
       case 'automation': return <Automation />;
+      case 'leadgen':    return <LeadGenSettings />;
+      case 'analytics':  return <AnalyticsDashboard />;
       case 'proxies':    return <ProxyManager />;
       case 'templates':  return <Templates />;
       case 'settings':   return <SettingsPanel />;

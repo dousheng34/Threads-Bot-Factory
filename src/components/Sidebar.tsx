@@ -2,13 +2,15 @@
 import React from 'react';
 import { useStore } from '@/lib/store';
 import type { TabType } from '@/lib/types';
-import { LayoutDashboard, Users, Send, Bot, Shield, FileText, Settings, Zap, Activity, Wand2 } from 'lucide-react';
+import { LayoutDashboard, Users, Send, Bot, Shield, FileText, Settings, Zap, Activity, Wand2, Target, BarChart3 } from 'lucide-react';
 
 const navItems: { id: TabType; label: string; icon: React.ReactNode; isAI?: boolean }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
   { id: 'accounts', label: 'Accounts', icon: <Users size={20} /> },
   { id: 'posting', label: 'Posting', icon: <Send size={20} /> },
   { id: 'automation', label: 'Automation', icon: <Bot size={20} /> },
+  { id: 'leadgen', label: 'LeadGen Autopilot', icon: <Target size={20} /> },
+  { id: 'analytics', label: 'Analytics Dashboard', icon: <BarChart3 size={20} /> },
   { id: 'proxies', label: 'Proxies', icon: <Shield size={20} /> },
   { id: 'templates', label: 'Templates', icon: <FileText size={20} /> },
   { id: 'settings', label: 'Settings', icon: <Settings size={20} /> },

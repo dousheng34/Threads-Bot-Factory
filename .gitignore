@@ -4,3 +4,8 @@ __pycache__/
 *.pyc
 .vscode/
 .idea/
+venv/
+.next/
+node_modules/
+scratch/
+test_bot_factory.db

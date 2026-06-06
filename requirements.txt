@@ -32,26 +32,14 @@ openai==1.30.0
 instagrapi==2.5.13
 
 # Telegram Bot
-aiogram==3.7.0
+aiogram>=3.10.0
+
 
 # Environment
 python-dotenv==1.0.1
 
 # Utils
-pydantic==2.7.1
-pydantic-settings==2.3.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
 loguru==0.7.2
 
-# Threads / Instagram
-instagrapi==2.5.13
-
-# Telegram Bot
-aiogram==3.7.0
-
-# Environment
-python-dotenv==1.0.1
-
-# Utils
-pydantic==2.7.1
-pydantic-settings==2.3.0
-loguru==0.7.2

@@ -12,6 +12,8 @@ import json
 import os
 import shutil
 from datetime import datetime
+from crypto_utils import encrypt_token, decrypt_token
+
 
 _DEFAULT_LOCAL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot_factory.db")
 DB_PATH = os.environ.get("DB_PATH") or _DEFAULT_LOCAL
@@ -181,7 +183,130 @@ async def init_db():
             )
         """)
 
+        # ── Social Accounts (Omnichannel SaaS) ─────────────────────────────
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS social_accounts (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                platform        TEXT NOT NULL,
+                platform_user_id TEXT,
+                username        TEXT NOT NULL,
+                access_token    TEXT NOT NULL,
+                refresh_token   TEXT,
+                token_expires_at TEXT,
+                status          TEXT DEFAULT 'active',
+                followers_count INTEGER DEFAULT 0,
+                posts_count     INTEGER DEFAULT 0,
+                settings        TEXT DEFAULT '{}',
+                created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
+                last_activity   TEXT
+            )
+        """)
+
+        # ── Unified Inbox (Conversations & Messages) ──────────────────────
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS conversations (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                social_account_id INTEGER REFERENCES social_accounts(id) ON DELETE CASCADE,
+                platform        TEXT NOT NULL,
+                external_thread_id TEXT NOT NULL,
+                external_user_id TEXT,
+                external_username TEXT,
+                last_message    TEXT,
+                created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at      TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER REFERENCES conversations(id) ON DELETE CASCADE,
+                external_message_id TEXT UNIQUE,
+                direction       TEXT NOT NULL, -- 'inbound' | 'outbound'
+                message_text    TEXT NOT NULL,
+                sentiment       TEXT DEFAULT 'neutral', -- 'positive' | 'neutral' | 'toxic'
+                is_replied      INTEGER DEFAULT 0,
+                created_at      TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # ── LeadGen Automation (Auto-Replies & Triggers) ─────────────────
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS auto_replies_config (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                social_account_id INTEGER REFERENCES social_accounts(id) ON DELETE SET NULL,
+                trigger_keyword TEXT NOT NULL,
+                match_type      TEXT DEFAULT 'exact', -- 'exact' | 'contains'
+                response_type   TEXT DEFAULT 'dm',    -- 'dm' | 'comment'
+                response_text   TEXT NOT NULL,
+                guide_file_url  TEXT,
+                is_active       INTEGER DEFAULT 1,
+                created_at      TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS lead_logs (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id             INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                auto_reply_id       INTEGER REFERENCES auto_replies_config(id) ON DELETE CASCADE,
+                conversation_id     INTEGER REFERENCES conversations(id) ON DELETE SET NULL,
+                recipient_external_id TEXT NOT NULL,
+                status              TEXT DEFAULT 'sent', -- 'sent' | 'failed'
+                created_at          TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # ── Analytics Snapshots ───────────────────────────────────────────
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS analytics_snapshots (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                social_account_id INTEGER REFERENCES social_accounts(id) ON DELETE CASCADE,
+                snapshot_date   TEXT NOT NULL,
+                followers       INTEGER DEFAULT 0,
+                impressions     INTEGER DEFAULT 0,
+                engagement      INTEGER DEFAULT 0,
+                clicks          INTEGER DEFAULT 0,
+                created_at      TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         await db.commit()
+
+        # Legacy accounts table migration
+        cursor = await db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='accounts'")
+        legacy_table_exists = await cursor.fetchone()
+        if legacy_table_exists:
+            cursor = await db.execute("SELECT COUNT(*) FROM social_accounts")
+            new_count = (await cursor.fetchone())[0]
+            if new_count == 0:
+                db.row_factory = aiosqlite.Row
+                cursor = await db.execute("SELECT * FROM accounts")
+                legacy_accounts = await cursor.fetchall()
+                for la in legacy_accounts:
+                    settings = {
+                        "proxy_id": la["proxy_id"],
+                        "daily_limit": la["daily_limit"],
+                        "auto_reply": la["auto_reply"],
+                        "auto_post": la["auto_post"],
+                        "reply_style": la["reply_style"],
+                        "notes": la["notes"]
+                    }
+                    enc_token = encrypt_token(la["access_token"])
+                    await db.execute("""
+                        INSERT INTO social_accounts (
+                            user_id, platform, platform_user_id, username, access_token, token_expires_at,
+                            status, followers_count, posts_count, settings, created_at, last_activity
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        la["user_id"], "threads", la["threads_user_id"], la["username"], enc_token, la["token_expires_at"],
+                        la["status"], la["followers"], la["posts_count"], json.dumps(settings), la["created_at"], la["last_activity"]
+                    ))
+                await db.commit()
+                print(f"[db] Migrated {len(legacy_accounts)} legacy accounts to social_accounts.")
+
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -532,3 +657,248 @@ async def get_post_stats(user_id: int = None) -> dict:
             "active_accounts": active,
             "success_rate": round(success / total * 100, 1) if total > 0 else 100,
         }
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# SOCIAL ACCOUNTS (OMNICHANNEL)
+# ════════════════════════════════════════════════════════════════════════════
+
+async def add_social_account(user_id: int, platform: str, platform_user_id: str,
+                             username: str, access_token: str, refresh_token: str = None,
+                             token_expires_at: str = None, settings: str = "{}") -> int:
+    enc_token = encrypt_token(access_token)
+    enc_refresh = encrypt_token(refresh_token) if refresh_token else None
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("""
+            INSERT INTO social_accounts (user_id, platform, platform_user_id, username, 
+                                        access_token, refresh_token, token_expires_at, settings)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (user_id, platform, platform_user_id, username, enc_token, enc_refresh, token_expires_at, settings))
+        await db.commit()
+        return cursor.lastrowid
+
+
+async def get_social_account(account_id: int) -> dict | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM social_accounts WHERE id = ?", (account_id,))
+        row = await cur.fetchone()
+        if row:
+            res = dict(row)
+            res["threads_user_id"] = res["platform_user_id"]
+            res["access_token"] = decrypt_token(res["access_token"])
+            if res["refresh_token"]:
+                res["refresh_token"] = decrypt_token(res["refresh_token"])
+            return res
+        return None
+
+
+async def get_social_accounts(user_id: int = None, platform: str = None, status: str = None) -> list:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        conditions = []
+        params = []
+        if user_id is not None:
+            conditions.append("user_id = ?")
+            params.append(user_id)
+        if platform:
+            conditions.append("platform = ?")
+            params.append(platform)
+        if status:
+            conditions.append("status = ?")
+            params.append(status)
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        cur = await db.execute(f"SELECT * FROM social_accounts {where} ORDER BY id", params)
+        rows = await cur.fetchall()
+        result = []
+        for r in rows:
+            res = dict(r)
+            res["threads_user_id"] = res["platform_user_id"]
+            res["access_token"] = decrypt_token(res["access_token"])
+            if res["refresh_token"]:
+                res["refresh_token"] = decrypt_token(res["refresh_token"])
+            result.append(res)
+        return result
+
+
+async def update_social_account(account_id: int, **kwargs):
+    if "access_token" in kwargs:
+        kwargs["access_token"] = encrypt_token(kwargs["access_token"])
+    if "refresh_token" in kwargs:
+        kwargs["refresh_token"] = encrypt_token(kwargs["refresh_token"]) if kwargs["refresh_token"] else None
+    async with aiosqlite.connect(DB_PATH) as db:
+        sets = ", ".join(f"{k} = ?" for k in kwargs)
+        vals = list(kwargs.values()) + [account_id]
+        await db.execute(f"UPDATE social_accounts SET {sets} WHERE id = ?", vals)
+        await db.commit()
+
+
+async def delete_social_account(account_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM social_accounts WHERE id = ?", (account_id,))
+        await db.commit()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# UNIFIED INBOX & MESSAGES
+# ════════════════════════════════════════════════════════════════════════════
+
+async def get_or_create_conversation(social_account_id: int, platform: str, external_thread_id: str,
+                                     external_user_id: str = None, external_username: str = None) -> dict:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("""
+            SELECT * FROM conversations 
+            WHERE social_account_id = ? AND platform = ? AND external_thread_id = ?
+        """, (social_account_id, platform, external_thread_id))
+        row = await cur.fetchone()
+        if row:
+            return dict(row)
+        
+        cursor = await db.execute("""
+            INSERT INTO conversations (social_account_id, platform, external_thread_id, external_user_id, external_username)
+            VALUES (?, ?, ?, ?, ?)
+        """, (social_account_id, platform, external_thread_id, external_user_id, external_username))
+        await db.commit()
+        
+        cur = await db.execute("SELECT * FROM conversations WHERE id = ?", (cursor.lastrowid,))
+        return dict(await cur.fetchone())
+
+
+async def add_message(conversation_id: int, external_message_id: str, direction: str,
+                      message_text: str, sentiment: str = 'neutral') -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        if external_message_id:
+            cur = await db.execute("SELECT id FROM messages WHERE external_message_id = ?", (external_message_id,))
+            exists = await cur.fetchone()
+            if exists:
+                return exists[0]
+        cursor = await db.execute("""
+            INSERT INTO messages (conversation_id, external_message_id, direction, message_text, sentiment)
+            VALUES (?, ?, ?, ?, ?)
+        """, (conversation_id, external_message_id, direction, message_text, sentiment))
+        await db.execute("""
+            UPDATE conversations 
+            SET last_message = ?, updated_at = ?
+            WHERE id = ?
+        """, (message_text, datetime.now().isoformat(), conversation_id))
+        await db.commit()
+        return cursor.lastrowid
+
+
+async def get_conversation_messages(conversation_id: int) -> list:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC", (conversation_id,))
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_all_conversations(user_id: int) -> list:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("""
+            SELECT c.*, s.username as account_username, s.platform as account_platform
+            FROM conversations c
+            JOIN social_accounts s ON c.social_account_id = s.id
+            WHERE s.user_id = ?
+            ORDER BY c.updated_at DESC
+        """, (user_id,))
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_conversation(conv_id: int) -> dict | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM conversations WHERE id = ?", (conv_id,))
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# AUTO-REPLIES & LEADGEN CONFIG
+# ════════════════════════════════════════════════════════════════════════════
+
+async def add_auto_reply_config(user_id: int, social_account_id: int | None, trigger_keyword: str,
+                                 response_text: str, response_type: str = "dm", match_type: str = "exact",
+                                 guide_file_url: str = None) -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("""
+            INSERT INTO auto_replies_config (user_id, social_account_id, trigger_keyword, response_text, 
+                                            response_type, match_type, guide_file_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (user_id, social_account_id, trigger_keyword, response_text, response_type, match_type, guide_file_url))
+        await db.commit()
+        return cursor.lastrowid
+
+
+async def get_auto_reply_configs(user_id: int) -> list:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM auto_replies_config WHERE user_id = ? ORDER BY id DESC", (user_id,))
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def update_auto_reply_config(config_id: int, **kwargs):
+    async with aiosqlite.connect(DB_PATH) as db:
+        sets = ", ".join(f"{k} = ?" for k in kwargs)
+        vals = list(kwargs.values()) + [config_id]
+        await db.execute(f"UPDATE auto_replies_config SET {sets} WHERE id = ?", vals)
+        await db.commit()
+
+
+async def delete_auto_reply_config(config_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM auto_replies_config WHERE id = ?", (config_id,))
+        await db.commit()
+
+
+async def log_lead(user_id: int, auto_reply_id: int, conversation_id: int | None,
+                   recipient_external_id: str, status: str = "sent") -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("""
+            INSERT INTO lead_logs (user_id, auto_reply_id, conversation_id, recipient_external_id, status)
+            VALUES (?, ?, ?, ?, ?)
+        """, (user_id, auto_reply_id, conversation_id, recipient_external_id, status))
+        await db.commit()
+        return cursor.lastrowid
+
+
+async def get_lead_logs(user_id: int) -> list:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("""
+            SELECT l.*, r.trigger_keyword, r.response_text, c.external_username, c.platform
+            FROM lead_logs l
+            JOIN auto_replies_config r ON l.auto_reply_id = r.id
+            LEFT JOIN conversations c ON l.conversation_id = c.id
+            WHERE l.user_id = ?
+            ORDER BY l.created_at DESC
+        """, (user_id,))
+        return [dict(row) for row in await cur.fetchall()]
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# ANALYTICS SNAPSHOTS
+# ════════════════════════════════════════════════════════════════════════════
+
+async def add_analytics_snapshot(social_account_id: int, snapshot_date: str, followers: int,
+                                 impressions: int, engagement: int, clicks: int) -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("""
+            INSERT INTO analytics_snapshots (social_account_id, snapshot_date, followers, impressions, engagement, clicks)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (social_account_id, snapshot_date, followers, impressions, engagement, clicks))
+        await db.commit()
+        return cursor.lastrowid
+
+
+async def get_analytics_snapshots(social_account_id: int, limit: int = 7) -> list:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("""
+            SELECT * FROM analytics_snapshots 
+            WHERE social_account_id = ? 
+            ORDER BY snapshot_date DESC LIMIT ?
+        """, (social_account_id, limit))
+        return [dict(r) for r in await cur.fetchall()]
+
