@@ -694,6 +694,24 @@ async def api_analytics_report(user: dict = Depends(require_user)):
     )
 
 
+# ── Telegram Webhook ─────────────────────────────────────────────────────────
+
+@app.post("/api/webhook/telegram")
+async def listen_telegram_webhook(request: Request):
+    from bot import dp, bot
+    from aiogram.types import Update
+    if not bot:
+        return {"status": "bot not configured"}
+    try:
+        body = await request.json()
+        update = Update.model_validate(body, context={"bot": bot})
+        await dp.feed_update(bot, update)
+        return {"status": "ok"}
+    except Exception as e:
+        print(f"[tg webhook] Error: {e}")
+        return {"status": "error", "detail": str(e)}
+
+
 # ── Startup ───────────────────────────────────────────────────────────────────
 
 @app.on_event("startup")
@@ -701,4 +719,15 @@ async def startup():
     await db.init_db()
     print("[webapp] Database initialized")
     print(f"[webapp] Admin TG ID: {ADMIN_TG_ID or 'not set'}")
+    
+    # Configure Telegram Webhook in production
+    from bot import bot
+    WEBAPP_URL = os.getenv("WEBAPP_URL")
+    if bot and WEBAPP_URL:
+        webhook_url = f"{WEBAPP_URL.rstrip('/')}/api/webhook/telegram"
+        try:
+            await bot.set_webhook(url=webhook_url)
+            print(f"[webapp] Telegram webhook set to {webhook_url}")
+        except Exception as webhook_err:
+            print(f"[webapp] Failed to set Telegram webhook: {webhook_err}")
 

@@ -23,7 +23,11 @@ async def run_webapp():
 
 async def run_bot():
     from bot import dp, bot
-    logger.info("Starting Telegram bot...")
+    import os
+    if os.getenv("WEBAPP_URL"):
+        logger.info("WEBAPP_URL is configured. Telegram bot will operate in WEBHOOK mode. Skipping polling.")
+        return
+    logger.info("Starting Telegram bot in POLLING mode...")
     await dp.start_polling(bot)
 
 
