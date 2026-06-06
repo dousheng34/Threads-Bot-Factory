@@ -15,7 +15,6 @@ from fastapi import FastAPI, Request, HTTPException, Depends, Form
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 
 import database as db
-from threads_api import process_spintax, publish_thread, get_user_profile
 import ai_engine
 from oauth import router as oauth_router
 

@@ -13,7 +13,7 @@ scheduler = AsyncIOScheduler(timezone="UTC")
 async def post_for_account(account: dict):
     """Generate and post content for a single account."""
     try:
-        from ai_post_generator import generate_post
+        from ai_engine import generate_post
         from meta_service import meta_service
         from whatsapp_service import whatsapp_service
 
@@ -90,7 +90,7 @@ async def post_for_account(account: dict):
 async def comment_for_account(account: dict):
     """Auto-comment on trending posts for Threads/Instagram accounts."""
     try:
-        from ai_handlers import generate_comment
+        from ai_engine import generate_reply
         from meta_service import meta_service
 
         platform = account["platform"]
@@ -105,7 +105,7 @@ async def comment_for_account(account: dict):
         simulated_posts = ["threads_feed_1", "threads_feed_2"]
         
         for post_id in simulated_posts:
-            comment_text = await generate_comment("Welcome to the future of AI automation platforms!")
+            comment_text = await generate_reply("Welcome to the future of AI automation platforms!", post_context="Trending post")
             success = False
             
             if platform == "threads":
